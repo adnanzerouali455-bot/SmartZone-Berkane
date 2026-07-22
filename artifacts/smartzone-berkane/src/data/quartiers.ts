@@ -41,6 +41,66 @@ const computeScore = (scores: Quartier['scores']) => {
   );
 };
 
+// ── Score pour un point cliqué sur la carte ─────────────────────────────────
+// Interpolation par distance inverse pondérée (IDW, puissance 2)
+function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000;
+  const φ1 = (lat1 * Math.PI) / 180;
+  const φ2 = (lat2 * Math.PI) / 180;
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+  const Δλ = ((lng2 - lng1) * Math.PI) / 180;
+  const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+export interface PointScore {
+  lat: number;
+  lng: number;
+  scoreGlobal: number;
+  scores: Quartier['scores'];
+  nearestQuartier: Quartier;
+  distanceToNearest: number; // mètres
+}
+
+export function computePointScore(lat: number, lng: number, quartiers: Quartier[]): PointScore {
+  // Distances en mètres de chaque quartier
+  const dists = quartiers.map(q => ({
+    q,
+    d: Math.max(haversineMeters(lat, lng, q.lat, q.lng), 10), // évite division/0
+  }));
+
+  // Poids = 1/d²
+  const weights = dists.map(({ d }) => 1 / (d * d));
+  const totalW = weights.reduce((s, w) => s + w, 0);
+
+  // Interpolation IDW pour chaque critère
+  const criterions = [
+    'securite', 'hopital', 'ecole', 'espacesVerts',
+    'routeNationale', 'commerces', 'centreville', 'mosquees', 'transport',
+  ] as const;
+
+  const interpolated = {} as Quartier['scores'];
+  for (const c of criterions) {
+    interpolated[c] = Math.round(
+      dists.reduce((sum, { q }, i) => sum + weights[i] * q.scores[c], 0) / totalW
+    );
+  }
+
+  const scoreGlobal = computeScore(interpolated);
+
+  // Quartier le plus proche
+  const nearest = dists.reduce((best, cur) => (cur.d < best.d ? cur : best));
+
+  return {
+    lat,
+    lng,
+    scoreGlobal,
+    scores: interpolated,
+    nearestQuartier: nearest.q,
+    distanceToNearest: Math.round(nearest.d),
+  };
+}
+
 export const QUARTIERS: Quartier[] = [
   {
     id: "centre-ville",

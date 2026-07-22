@@ -5,11 +5,12 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { Route, Switch, Router as WouterRouter } from 'wouter';
 import NotFound from '@/pages/not-found';
 
-import { QUARTIERS, Quartier } from './data/quartiers';
+import { QUARTIERS, Quartier, PointScore } from './data/quartiers';
 import { Header } from './components/Header';
 import { ChatPanel } from './components/ChatPanel';
 import { Map } from './components/Map';
 import { QuartierDetail } from './components/QuartierDetail';
+import { PointDetail } from './components/PointDetail';
 import { QuartierTable } from './components/QuartierTable';
 import { TableProperties } from 'lucide-react';
 
@@ -21,6 +22,7 @@ function Home() {
   const [highlightedIds, setHighlightedIds] = useState<string[]>([]);
   const [centerOn, setCenterOn] = useState<{ lat: number; lng: number; zoom: number } | undefined>();
   const [showTable, setShowTable] = useState(false);
+  const [clickedPoint, setClickedPoint] = useState<PointScore | null>(null);
 
   return (
     <div className="h-[100dvh] flex flex-col overflow-hidden bg-gray-50 font-sans">
@@ -86,22 +88,36 @@ function Home() {
             highlightedIds={highlightedIds}
             onQuartierClick={(q) => {
               setSelectedQuartier(q);
+              setClickedPoint(null);
               setHighlightedIds([q.id]);
               setCenterOn({ lat: q.lat, lng: q.lng, zoom: 16 });
+            }}
+            onMapClick={(point) => {
+              setClickedPoint(point);
+              setSelectedQuartier(null);
+              setHighlightedIds([]);
             }}
             centerOn={centerOn} 
           />
 
           {/* Panel détail rétractable en bas */}
-          <div className={`absolute bottom-0 left-0 right-0 bg-white border-t shadow-2xl transition-transform duration-300 z-[500] ${selectedQuartier ? 'translate-y-0' : 'translate-y-full'}`}>
-            <QuartierDetail 
-              quartier={selectedQuartier} 
-              onClose={() => {
-                setSelectedQuartier(null);
-                setHighlightedIds([]);
-                setCenterOn({ lat: 34.9218, lng: -2.3200, zoom: 14 });
-              }} 
-            />
+          <div className={`absolute bottom-0 left-0 right-0 bg-white border-t shadow-2xl transition-transform duration-300 z-[500] ${(selectedQuartier || clickedPoint) ? 'translate-y-0' : 'translate-y-full'}`}>
+            {selectedQuartier && (
+              <QuartierDetail 
+                quartier={selectedQuartier} 
+                onClose={() => {
+                  setSelectedQuartier(null);
+                  setHighlightedIds([]);
+                  setCenterOn({ lat: 34.9218, lng: -2.3200, zoom: 14 });
+                }} 
+              />
+            )}
+            {clickedPoint && !selectedQuartier && (
+              <PointDetail
+                point={clickedPoint}
+                onClose={() => setClickedPoint(null)}
+              />
+            )}
           </div>
 
           {/* Tableau modal */}
