@@ -1,0 +1,61 @@
+Étape 1 — Créer le Repl
+Va sur replit.com et connecte-toi
+Clique sur "+ Create Repl"
+Choisis le template "HTML, CSS, JS" (pas besoin de framework backend, tout tourne côté client)
+Nomme ton projet : smartzone-berkane
+Clique "Create Repl"
+Étape 2 — Structure des fichiers
+
+Dans l'explorateur de fichiers à gauche, crée cette structure :
+
+smartzone-berkane/
+├── index.html
+├── style.css
+├── script.js
+└── data/
+    └── quartiers-mock.json
+Étape 3 — Coller le prompt dans Kimi AI
+Utilise le prompt complet que je t'ai donné précédemment
+Récupère le code généré (HTML/CSS/JS)
+Si Kimi te donne tout dans un seul fichier HTML, tu peux soit tout garder dans index.html, soit séparer proprement (recommandé pour éditer plus facilement après)
+Étape 4 — Coller le code dans Replit
+Ouvre index.html → colle la partie HTML + les balises <link> et <script> qui pointent vers style.css et script.js
+Ouvre style.css → colle le CSS
+Ouvre script.js → colle le JavaScript (Leaflet, Overpass API, logique du chat, scoring)
+Étape 5 — Vérifier les dépendances CDN
+
+Dans le <head> de index.html, assure-toi d'avoir bien :
+
+html
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+Ce sont toutes des ressources gratuites, aucune clé API requise.
+
+Étape 6 — Lancer et tester
+Clique sur le bouton "Run" en haut
+Replit ouvre un onglet avec l'URL de preview (ex: https://smartzone-berkane.tonpseudo.repl.co)
+Teste :
+Le formulaire de préférences s'affiche bien à l'ouverture
+La carte Leaflet se charge et se centre sur Berkane
+Le chat répond aux questions test
+Les couches restaurants/cafés/hôtels s'activent
+Étape 7 — Corriger les erreurs (si besoin)
+Ouvre la Console (icône en bas de l'écran Replit)
+Si tu vois des erreurs Overpass API (souvent des timeouts en dev), copie le message d'erreur et renvoie-le-moi ou à Kimi pour ajuster le code de fallback
+Vérifie que localStorage fonctionne bien (préférences sauvegardées après rechargement)
+Étape 8 — Rendre le Repl public/partageable
+Clique sur les 3 points en haut du Repl → "Share"
+Active "Publish" si tu veux une URL publique stable (Replit propose un déploiement gratuit type "Static Deployment" pour ce genre de projet)
+Copie le lien pour le partager ou l'intégrer dans ton pitch/dossier de projet
+Étape 9 — Ajouter un README (optionnel mais utile pour un pitch)
+
+Crée un fichier README.md avec :
+
+markdown
+# SmartZone Berkane
+Application de scoring de qualité de vie par quartier à Berkane, Maroc.
+Technologies : Leaflet.js, OpenStreetMap, Overpass API, Chart.js (100% gratuit)
+Fonctionnalités : formulaire de préférences, carte interactive, chat IA, 
+POI (hôpitaux, écoles, restaurants, cafés, hôtels), scoring pondéré.
