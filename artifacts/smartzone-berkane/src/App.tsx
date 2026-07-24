@@ -13,6 +13,7 @@ import { Map } from './components/Map';
 import { QuartierDetail } from './components/QuartierDetail';
 import { PointDetail } from './components/PointDetail';
 import { QuartierTable } from './components/QuartierTable';
+import { PreferencesDashboard } from './components/PreferencesDashboard';
 import { TableProperties, Loader2, AlertTriangle } from 'lucide-react';
 
 const queryClient = new QueryClient();
@@ -27,6 +28,7 @@ function Home() {
   const [centerOn, setCenterOn]                 = useState<{ lat: number; lng: number; zoom: number } | undefined>();
   const [showTable, setShowTable]               = useState(false);
   const [clickedPoint, setClickedPoint]         = useState<PointScore | null>(null);
+  const [showAnalysis, setShowAnalysis]         = useState(false);
 
   // ── Load Overpass POI data once on mount ──────────────────────────────────
   useEffect(() => {
@@ -63,7 +65,7 @@ function Home() {
 
   return (
     <div className="h-[100dvh] flex flex-col overflow-hidden bg-gray-50 font-sans">
-      <Header />
+      <Header onOpenAnalysis={() => setShowAnalysis(true)} />
 
       {/* POI loading / error banner */}
       {poisState === 'loading' && (
@@ -199,6 +201,19 @@ function Home() {
           )}
         </main>
       </div>
+
+      {/* Preferences / AI Analysis Dashboard */}
+      {showAnalysis && (
+        <PreferencesDashboard
+          quartiers={quartiers}
+          pois={pois}
+          onClose={() => setShowAnalysis(false)}
+          onSelectQuartier={q => {
+            handleQuartierClick(q);
+            setShowAnalysis(false);
+          }}
+        />
+      )}
     </div>
   );
 }
