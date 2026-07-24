@@ -1,65 +1,118 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Route, Switch, Router as WouterRouter } from 'wouter';
 import NotFound from '@/pages/not-found';
 
-import { QUARTIERS, Quartier, PointScore } from './data/quartiers';
+import { QUARTIERS, Quartier, PointScore, computeScoresFromPOIs, computeScore } from './data/quartiers';
+import { fetchBerkanePOIs, BerkanePOIs } from './lib/overpassService';
 import { Header } from './components/Header';
 import { ChatPanel } from './components/ChatPanel';
 import { Map } from './components/Map';
 import { QuartierDetail } from './components/QuartierDetail';
 import { PointDetail } from './components/PointDetail';
 import { QuartierTable } from './components/QuartierTable';
-import { TableProperties } from 'lucide-react';
+import { TableProperties, Loader2, AlertTriangle } from 'lucide-react';
 
 const queryClient = new QueryClient();
 
 function Home() {
-  const quartiers = QUARTIERS;
+  const [quartiers, setQuartiers] = useState<Quartier[]>(QUARTIERS);
+  const [pois, setPois]           = useState<BerkanePOIs | null>(null);
+  const [poisState, setPoisState] = useState<'loading' | 'ready' | 'error'>('loading');
+
   const [selectedQuartier, setSelectedQuartier] = useState<Quartier | null>(null);
-  const [highlightedIds, setHighlightedIds] = useState<string[]>([]);
-  const [centerOn, setCenterOn] = useState<{ lat: number; lng: number; zoom: number } | undefined>();
-  const [showTable, setShowTable] = useState(false);
-  const [clickedPoint, setClickedPoint] = useState<PointScore | null>(null);
+  const [highlightedIds,   setHighlightedIds]   = useState<string[]>([]);
+  const [centerOn, setCenterOn]                 = useState<{ lat: number; lng: number; zoom: number } | undefined>();
+  const [showTable, setShowTable]               = useState(false);
+  const [clickedPoint, setClickedPoint]         = useState<PointScore | null>(null);
+
+  // ── Load Overpass POI data once on mount ──────────────────────────────────
+  useEffect(() => {
+    fetchBerkanePOIs()
+      .then(data => {
+        setPois(data);
+        // Recompute each quartier's scores from real OSM distances
+        setQuartiers(
+          QUARTIERS.map(q => {
+            const scores = computeScoresFromPOIs(q.lat, q.lng, data);
+            return { ...q, scores, scoreGlobal: computeScore(scores) };
+          })
+        );
+        setPoisState('ready');
+      })
+      .catch(err => {
+        console.warn('Overpass API unavailable, using static scores.', err);
+        setPoisState('error');
+      });
+  }, []);
+
+  const handleQuartierClick = useCallback((q: Quartier) => {
+    setSelectedQuartier(q);
+    setClickedPoint(null);
+    setHighlightedIds([q.id]);
+    setCenterOn({ lat: q.lat, lng: q.lng, zoom: 16 });
+  }, []);
+
+  const handleMapClick = useCallback((point: PointScore) => {
+    setClickedPoint(point);
+    setSelectedQuartier(null);
+    setHighlightedIds([]);
+  }, []);
 
   return (
     <div className="h-[100dvh] flex flex-col overflow-hidden bg-gray-50 font-sans">
       <Header />
+
+      {/* POI loading / error banner */}
+      {poisState === 'loading' && (
+        <div className="bg-blue-50 border-b border-blue-100 px-4 py-1.5 flex items-center gap-2 text-xs text-blue-700">
+          <Loader2 size={13} className="animate-spin flex-shrink-0" />
+          Chargement des données OpenStreetMap (hôpitaux, écoles, mosquées…)
+        </div>
+      )}
+      {poisState === 'error' && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-1.5 flex items-center gap-2 text-xs text-amber-700">
+          <AlertTriangle size={13} className="flex-shrink-0" />
+          Données OSM indisponibles — scores basés sur les valeurs statiques.
+        </div>
+      )}
+
       <div className="flex flex-1 overflow-hidden relative">
         {/* Colonne gauche */}
         <aside className="w-[380px] flex-shrink-0 flex flex-col border-r bg-white overflow-hidden z-40 relative shadow-sm">
-          <ChatPanel 
-            quartiers={quartiers} 
-            onRecommendation={(qs) => {
+          <ChatPanel
+            quartiers={quartiers}
+            onRecommendation={qs => {
               setHighlightedIds(qs.map(q => q.id));
               if (qs.length === 1) {
                 setCenterOn({ lat: qs[0].lat, lng: qs[0].lng, zoom: 16 });
                 setSelectedQuartier(qs[0]);
-              } else if (qs.length > 1) {
+              } else {
                 setCenterOn({ lat: 34.9218, lng: -2.3200, zoom: 14 });
                 setSelectedQuartier(null);
               }
-            }} 
+            }}
           />
-          
+
           <div className="border-t p-4 overflow-y-auto flex-1 bg-gray-50/50">
             <h3 className="font-semibold text-sm mb-3 text-gray-800">🏆 Classement Global</h3>
             <div className="space-y-2">
-              {[...quartiers].sort((a,b) => b.scoreGlobal - a.scoreGlobal).map((q, i) => (
-                <div 
-                  key={q.id} 
-                  onClick={() => { 
-                    setSelectedQuartier(q); 
-                    setCenterOn({ lat: q.lat, lng: q.lng, zoom: 16 });
-                    setHighlightedIds([q.id]);
-                  }}
+              {[...quartiers].sort((a, b) => b.scoreGlobal - a.scoreGlobal).map((q, i) => (
+                <div
+                  key={q.id}
+                  onClick={() => handleQuartierClick(q)}
                   className={`flex items-center gap-3 p-2.5 rounded-lg cursor-pointer transition-all border ${
-                    selectedQuartier?.id === q.id ? 'bg-blue-50 border-blue-200 shadow-sm' : 'bg-white border-transparent hover:border-gray-200 hover:shadow-sm'
+                    selectedQuartier?.id === q.id
+                      ? 'bg-blue-50 border-blue-200 shadow-sm'
+                      : 'bg-white border-transparent hover:border-gray-200 hover:shadow-sm'
                   }`}
                 >
-                  <span className="text-lg w-6 text-center">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : <span className="text-sm font-bold text-gray-400">{i+1}.</span>}</span>
+                  <span className="text-lg w-6 text-center">
+                    {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉'
+                      : <span className="text-sm font-bold text-gray-400">{i + 1}.</span>}
+                  </span>
                   <span className="flex-1 text-sm font-medium text-gray-800">{q.nom}</span>
                   <div className="flex flex-col items-end">
                     <span className="text-sm font-bold text-blue-600">{q.scoreGlobal}</span>
@@ -71,10 +124,10 @@ function Home() {
           </div>
         </aside>
 
-        {/* Zone droite */}
+        {/* Zone carte */}
         <main className="flex-1 flex flex-col overflow-hidden relative bg-gray-100 z-10">
           <div className="absolute top-4 right-4 z-[1000]">
-            <button 
+            <button
               onClick={() => setShowTable(!showTable)}
               className="bg-white hover:bg-gray-50 text-gray-700 font-medium px-4 py-2 rounded-lg shadow border flex items-center gap-2 transition-colors"
             >
@@ -83,33 +136,27 @@ function Home() {
             </button>
           </div>
 
-          <Map 
-            quartiers={quartiers} 
+          <Map
+            quartiers={quartiers}
             highlightedIds={highlightedIds}
-            onQuartierClick={(q) => {
-              setSelectedQuartier(q);
-              setClickedPoint(null);
-              setHighlightedIds([q.id]);
-              setCenterOn({ lat: q.lat, lng: q.lng, zoom: 16 });
-            }}
-            onMapClick={(point) => {
-              setClickedPoint(point);
-              setSelectedQuartier(null);
-              setHighlightedIds([]);
-            }}
-            centerOn={centerOn} 
+            onQuartierClick={handleQuartierClick}
+            onMapClick={handleMapClick}
+            centerOn={centerOn}
+            pois={pois}
           />
 
           {/* Panel détail rétractable en bas */}
-          <div className={`absolute bottom-0 left-0 right-0 bg-white border-t shadow-2xl transition-transform duration-300 z-[500] ${(selectedQuartier || clickedPoint) ? 'translate-y-0' : 'translate-y-full'}`}>
+          <div className={`absolute bottom-0 left-0 right-0 bg-white border-t shadow-2xl transition-transform duration-300 z-[500] ${
+            (selectedQuartier || clickedPoint) ? 'translate-y-0' : 'translate-y-full'
+          }`}>
             {selectedQuartier && (
-              <QuartierDetail 
-                quartier={selectedQuartier} 
+              <QuartierDetail
+                quartier={selectedQuartier}
                 onClose={() => {
                   setSelectedQuartier(null);
                   setHighlightedIds([]);
                   setCenterOn({ lat: 34.9218, lng: -2.3200, zoom: 14 });
-                }} 
+                }}
               />
             )}
             {clickedPoint && !selectedQuartier && (
@@ -120,7 +167,7 @@ function Home() {
             )}
           </div>
 
-          {/* Tableau modal */}
+          {/* Tableau comparatif modal */}
           {showTable && (
             <div className="absolute inset-0 bg-gray-900/40 backdrop-blur-sm z-[600] overflow-hidden flex flex-col">
               <div className="m-4 md:m-8 bg-white rounded-xl shadow-2xl flex-1 flex flex-col overflow-hidden border">
@@ -128,23 +175,21 @@ function Home() {
                   <h2 className="font-bold text-lg flex items-center gap-2 text-gray-800">
                     <TableProperties className="text-blue-600" /> Comparateur des quartiers
                   </h2>
-                  <button 
-                    onClick={() => setShowTable(false)} 
+                  <button
+                    onClick={() => setShowTable(false)}
                     className="text-gray-500 hover:bg-gray-200 p-1.5 rounded-md transition-colors"
                   >
                     ✕ Fermer
                   </button>
                 </div>
                 <div className="flex-1 overflow-auto p-4 bg-gray-50/30">
-                  <QuartierTable 
-                    quartiers={quartiers} 
-                    highlightedIds={highlightedIds} 
-                    onSelect={(q) => { 
-                      setSelectedQuartier(q); 
-                      setHighlightedIds([q.id]);
-                      setCenterOn({ lat: q.lat, lng: q.lng, zoom: 16 });
-                      setShowTable(false); 
-                    }} 
+                  <QuartierTable
+                    quartiers={quartiers}
+                    highlightedIds={highlightedIds}
+                    onSelect={q => {
+                      handleQuartierClick(q);
+                      setShowTable(false);
+                    }}
                   />
                 </div>
               </div>
