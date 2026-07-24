@@ -152,6 +152,7 @@ function Home() {
             {selectedQuartier && (
               <QuartierDetail
                 quartier={selectedQuartier}
+                pois={pois}
                 onClose={() => {
                   setSelectedQuartier(null);
                   setHighlightedIds([]);
@@ -162,6 +163,7 @@ function Home() {
             {clickedPoint && !selectedQuartier && (
               <PointDetail
                 point={clickedPoint}
+                pois={pois}
                 onClose={() => setClickedPoint(null)}
               />
             )}

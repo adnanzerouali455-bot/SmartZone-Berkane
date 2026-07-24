@@ -1,15 +1,11 @@
-import React from 'react';
-import { PointScore } from '../data/quartiers';
-import { X, MapPin, Info } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { PointScore, haversineMeters } from '../data/quartiers';
+import { BerkanePOIs, POI } from '../lib/overpassService';
+import { X, MapPin, Info, Stethoscope, GraduationCap, TreePine, ShoppingBag, Bus, ShieldCheck, CarFront } from 'lucide-react';
 import { Radar } from 'react-chartjs-2';
 import {
-  Chart as ChartJS,
-  RadialLinearScale,
-  PointElement,
-  LineElement,
-  Filler,
-  Tooltip,
-  Legend,
+  Chart as ChartJS, RadialLinearScale, PointElement,
+  LineElement, Filler, Tooltip, Legend,
 } from 'chart.js';
 
 ChartJS.register(RadialLinearScale, PointElement, LineElement, Filler, Tooltip, Legend);
@@ -17,148 +13,145 @@ ChartJS.register(RadialLinearScale, PointElement, LineElement, Filler, Tooltip, 
 interface PointDetailProps {
   point: PointScore;
   onClose: () => void;
+  pois?: BerkanePOIs | null;
 }
 
-const LABELS = [
-  'Sécurité', 'Hôpital', 'École', 'Espaces verts',
-  'Route (inverse)', 'Commerces', 'Centre-ville', 'Mosquées', 'Transport',
+function fmtDist(m: number): string {
+  if (!isFinite(m)) return '—';
+  if (m < 1000) return `${Math.round(m)} m`;
+  return `${(m / 1000).toFixed(2)} km`;
+}
+
+function nearestDist(list: POI[], lat: number, lng: number): number {
+  if (!list?.length) return Infinity;
+  return Math.min(...list.map(p => haversineMeters(lat, lng, p.lat, p.lng)));
+}
+
+function scoreColor(s: number) {
+  return s >= 75 ? '#16a34a' : s >= 50 ? '#f59e0b' : '#dc2626';
+}
+
+const RADAR_LABELS = [
+  'Sécurité','Hôpital','École','Espaces verts',
+  'Route (inv.)','Commerces','Centre-ville','Mosquées','Transport',
 ];
 
-function formatCoord(v: number) {
-  return v.toFixed(5);
-}
+export const PointDetail: React.FC<PointDetailProps> = ({ point, onClose, pois }) => {
+  const sc = point.scoreGlobal;
+  const col = scoreColor(sc);
+  const barCls = sc >= 75 ? 'bg-green-600' : sc >= 50 ? 'bg-amber-500' : 'bg-red-600';
+  const txtCls = sc >= 75 ? 'text-green-600' : sc >= 50 ? 'text-amber-500' : 'text-red-600';
 
-export const PointDetail: React.FC<PointDetailProps> = ({ point, onClose }) => {
-  const scoreColor =
-    point.scoreGlobal >= 75 ? '#16a34a' : point.scoreGlobal >= 50 ? '#f59e0b' : '#dc2626';
-  const scoreTailwind =
-    point.scoreGlobal >= 75
-      ? 'text-green-600'
-      : point.scoreGlobal >= 50
-      ? 'text-amber-500'
-      : 'text-red-600';
-  const barColor =
-    point.scoreGlobal >= 75 ? 'bg-green-600' : point.scoreGlobal >= 50 ? 'bg-amber-500' : 'bg-red-600';
+  // Real distances from POI data
+  const realDist = useMemo(() => {
+    if (!pois) return null;
+    const { lat, lng } = point;
+    return {
+      hopital:        nearestDist(pois.hopital,        lat, lng),
+      ecole:          nearestDist(pois.ecole,           lat, lng),
+      parc:           nearestDist(pois.espacesVerts,    lat, lng),
+      commerce:       nearestDist(pois.commerce,        lat, lng),
+      mosquee:        nearestDist(pois.mosquee,         lat, lng),
+      transport:      nearestDist(pois.transport,       lat, lng),
+      police:         nearestDist(pois.police,          lat, lng),
+      routeNationale: nearestDist(pois.routeNationale,  lat, lng),
+    };
+  }, [pois, point]);
 
-  const scoreValues = [
-    point.scores.securite,
-    point.scores.hopital,
-    point.scores.ecole,
-    point.scores.espacesVerts,
-    point.scores.routeNationale,
-    point.scores.commerces,
-    point.scores.centreville,
-    point.scores.mosquees,
-    point.scores.transport,
+  const distCards = [
+    { icon: <Stethoscope size={15} />, bg: 'bg-red-50 text-red-600',    label: 'Hôpital',    dist: realDist?.hopital,        score: point.scores.hopital },
+    { icon: <GraduationCap size={15}/>, bg: 'bg-blue-50 text-blue-600', label: 'École',      dist: realDist?.ecole,          score: point.scores.ecole },
+    { icon: <TreePine size={15} />,    bg: 'bg-green-50 text-green-600', label: 'Parc',       dist: realDist?.parc,           score: point.scores.espacesVerts },
+    { icon: <ShoppingBag size={15} />, bg: 'bg-amber-50 text-amber-600',label: 'Commerces',  dist: realDist?.commerce,       score: point.scores.commerces },
+    { icon: <MapPin size={15} />,      bg: 'bg-purple-50 text-purple-600',label: 'Mosquée',  dist: realDist?.mosquee,        score: point.scores.mosquees },
+    { icon: <Bus size={15} />,         bg: 'bg-orange-50 text-orange-600',label: 'Transport', dist: realDist?.transport,      score: point.scores.transport },
+    { icon: <ShieldCheck size={15} />, bg: 'bg-indigo-50 text-indigo-600',label: 'Police',   dist: realDist?.police,         score: point.scores.securite },
+    { icon: <CarFront size={15} />,    bg: 'bg-gray-100 text-gray-600', label: 'Route nat.', dist: realDist?.routeNationale, score: point.scores.routeNationale },
   ];
 
   const radarData = {
-    labels: LABELS,
-    datasets: [
-      {
-        label: 'Score du point',
-        data: scoreValues,
-        backgroundColor: `${scoreColor}22`,
-        borderColor: scoreColor,
-        borderWidth: 2,
-        pointBackgroundColor: scoreColor,
-        pointRadius: 3,
-      },
-    ],
+    labels: RADAR_LABELS,
+    datasets: [{
+      label: 'Score',
+      data: [
+        point.scores.securite, point.scores.hopital, point.scores.ecole,
+        point.scores.espacesVerts, point.scores.routeNationale, point.scores.commerces,
+        point.scores.centreville, point.scores.mosquees, point.scores.transport,
+      ],
+      backgroundColor: `${col}22`,
+      borderColor: col,
+      borderWidth: 2,
+      pointBackgroundColor: col,
+      pointRadius: 3,
+    }],
   };
 
   const radarOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    scales: {
-      r: {
-        min: 0,
-        max: 100,
-        ticks: { display: false, stepSize: 25 },
-        grid: { color: 'rgba(0,0,0,0.06)' },
-        pointLabels: { font: { size: 10 } },
-      },
-    },
+    responsive: true, maintainAspectRatio: false,
+    scales: { r: { min: 0, max: 100, ticks: { display: false, stepSize: 25 }, grid: { color: 'rgba(0,0,0,0.06)' }, pointLabels: { font: { size: 9 } } } },
     plugins: { legend: { display: false } },
   };
 
-  const criterionRows = [
-    { label: 'Sécurité', value: point.scores.securite },
-    { label: 'Hôpital', value: point.scores.hopital },
-    { label: 'École', value: point.scores.ecole },
-    { label: 'Espaces verts', value: point.scores.espacesVerts },
-    { label: 'Route nationale', value: point.scores.routeNationale },
-    { label: 'Commerces', value: point.scores.commerces },
-    { label: 'Centre-ville', value: point.scores.centreville },
-    { label: 'Mosquées', value: point.scores.mosquees },
-    { label: 'Transport', value: point.scores.transport },
-  ];
-
   return (
-    <div className="p-4 relative">
-      {/* Bouton fermer */}
-      <button
-        onClick={onClose}
-        className="absolute top-4 right-4 p-1 rounded-full hover:bg-gray-100 text-gray-500"
-        data-testid="button-close-point"
-      >
+    <div className="p-4 relative max-h-[55vh] overflow-y-auto">
+      <button onClick={onClose} className="absolute top-4 right-4 p-1 rounded-full hover:bg-gray-100 text-gray-500 z-10">
         <X size={20} />
       </button>
 
       {/* En-tête */}
-      <div className="flex items-start gap-3 mb-4">
-        <div className="bg-blue-100 p-2 rounded-lg text-blue-600 mt-0.5">
-          <MapPin size={22} />
-        </div>
+      <div className="flex items-start gap-3 mb-3">
+        <div className="bg-blue-100 p-2 rounded-lg text-blue-600 mt-0.5"><MapPin size={20} /></div>
         <div className="flex-1">
-          <h2 className="text-xl font-bold text-gray-900">Point personnalisé</h2>
-          <p className="text-xs text-gray-400 font-mono mt-0.5">
-            {formatCoord(point.lat)}°N, {formatCoord(Math.abs(point.lng))}°O
+          <h2 className="text-lg font-bold text-gray-900">Point personnalisé</h2>
+          <p className="text-xs text-gray-400 font-mono">
+            {point.lat.toFixed(5)}°N, {Math.abs(point.lng).toFixed(5)}°O
           </p>
-          <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
-            <Info size={12} />
-            À <span className="font-semibold text-gray-700 mx-1">
-              {point.distanceToNearest >= 1000
-                ? `${(point.distanceToNearest / 1000).toFixed(1)} km`
-                : `${point.distanceToNearest} m`}
-            </span>
-            du quartier le plus proche :{' '}
-            <span className="font-semibold text-blue-600 ml-1">{point.nearestQuartier.nom}</span>
+          <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+            <Info size={11} />
+            À <b className="mx-1">{fmtDist(point.distanceToNearest)}</b> de{' '}
+            <span className="text-blue-600 font-semibold ml-1">{point.nearestQuartier.nom}</span>
           </p>
+          {pois && (
+            <p className="text-[10px] text-emerald-600 mt-0.5 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+              Distances calculées depuis données OSM réelles
+            </p>
+          )}
         </div>
         {/* Score global */}
         <div className="text-right flex-shrink-0">
-          <div className="text-xs text-gray-500 mb-1">Score global</div>
+          <div className="text-[10px] text-gray-500 mb-1">Score global</div>
           <div className="flex items-center gap-2">
-            <div className="w-24 h-2 bg-gray-200 rounded-full overflow-hidden">
-              <div className={`h-full ${barColor}`} style={{ width: `${point.scoreGlobal}%` }} />
+            <div className="w-20 h-2 bg-gray-200 rounded-full overflow-hidden">
+              <div className={`h-full ${barCls}`} style={{ width: `${sc}%` }} />
             </div>
-            <span className={`text-2xl font-bold ${scoreTailwind}`}>
-              {point.scoreGlobal}
-              <span className="text-sm font-normal text-gray-400">/100</span>
+            <span className={`text-xl font-bold ${txtCls}`}>
+              {sc}<span className="text-xs font-normal text-gray-400">/100</span>
             </span>
           </div>
         </div>
       </div>
 
-      {/* Grille scores + radar */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Critères sous forme de barres */}
-        <div className="space-y-2">
-          {criterionRows.map(({ label, value }) => {
-            const c = value >= 75 ? '#16a34a' : value >= 50 ? '#f59e0b' : '#dc2626';
+        {/* Distance cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-2 gap-2">
+          {distCards.map(card => {
+            const d = card.dist;
+            const distStr = d != null ? fmtDist(d) : '—';
+            const c = scoreColor(card.score);
             return (
-              <div key={label} className="flex items-center gap-2">
-                <span className="text-xs text-gray-600 w-28 flex-shrink-0">{label}</span>
-                <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all"
-                    style={{ width: `${value}%`, background: c }}
-                  />
+              <div key={card.label} className="bg-gray-50 border rounded-lg p-2 flex flex-col gap-1.5">
+                <div className="flex items-center gap-1.5">
+                  <span className={`p-1 rounded ${card.bg}`}>{card.icon}</span>
+                  <span className="text-[10px] text-gray-500">{card.label}</span>
                 </div>
-                <span className="text-xs font-bold w-8 text-right" style={{ color: c }}>
-                  {value}
-                </span>
+                <div className="font-bold text-sm text-gray-800">{distStr}</div>
+                <div className="flex items-center gap-1">
+                  <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${card.score}%`, background: c }} />
+                  </div>
+                  <span className="text-[10px] font-bold" style={{ color: c }}>{card.score}</span>
+                </div>
               </div>
             );
           })}
@@ -170,8 +163,8 @@ export const PointDetail: React.FC<PointDetailProps> = ({ point, onClose }) => {
         </div>
       </div>
 
-      <p className="text-[10px] text-gray-400 mt-3 italic">
-        Score calculé par interpolation pondérée (IDW) à partir des 8 quartiers de Berkane.
+      <p className="text-[10px] text-gray-400 mt-2 italic">
+        Distances exactes (vol d'oiseau) vers les POI OpenStreetMap les plus proches.
       </p>
     </div>
   );
